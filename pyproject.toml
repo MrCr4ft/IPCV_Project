@@ -8,6 +8,7 @@ authors = ["Giorgio Buzzanca <giorgio.buzzanca@studio.unibo.it>"]
 python = "^3.9"
 opencv-python = "^4.6.0"
 matplotlib = "^3.6.0"
+jupyterlab = "^3.4.7"
 
 [tool.poetry.dev-dependencies]
 
