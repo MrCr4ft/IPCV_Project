@@ -6,6 +6,7 @@ authors = ["Giorgio Buzzanca <giorgio.buzzanca@studio.unibo.it>"]
 
 [tool.poetry.dependencies]
 python = "^3.9"
+opencv-python = "^4.6.0"
 
 [tool.poetry.dev-dependencies]
 
