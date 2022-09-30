@@ -300,6 +300,7 @@ def printRodDescriptions(rods_descriptions: typing.List[typing.Dict]):
                   (str(rod_description["1st_hole_center"]), rod_description["1st_hole_diameter"]))
             print("The second hole in the rod is at position %s and has diameter equal to %.2f" %
                   (str(rod_description["2nd_hole_center"]), rod_description["2nd_hole_diameter"]))
+        print("\n")
     print("\n\n")
 
 
