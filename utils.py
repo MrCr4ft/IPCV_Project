@@ -8,6 +8,7 @@ import scipy
 import scipy.signal
 from matplotlib import pyplot as plt
 
+
 MIN_ROD_AREA = 1280
 MAX_ROD_AREA = 6000
 
@@ -16,6 +17,8 @@ def binarizeImage(image: np.ndarray, kde_bandwidth: int = 5) -> np.ndarray:
     x = np.arange(255)[:, None]
     kde = KernelDensity(kernel='gaussian', bandwidth=kde_bandwidth).fit(image.ravel()[:, None])
     log_dens = kde.score_samples(x)
+    # equivalent to the second zero-crossing of the first derivative of the signal,
+    # where the first zero-crossing is in correspondence of the first mode
     threshold = scipy.signal.argrelmin(log_dens)[0][0]
     binarized_image = np.zeros(image.shape, dtype=image.dtype)
     binarized_image[image < threshold] = 0
@@ -40,6 +43,8 @@ def drawConnectedComponents(n_labels: int, label_ids: np.ndarray,
                                    (255, 255, 255), 1)
         labeled_img = cv.circle(labeled_img, (int(centroids[cc][0]), int(centroids[cc][1])), radius=2,
                                 color=(0, 0, 0), thickness=-1)
+        labeled_img = cv.putText(labeled_img, str(cc), (stats[cc][0], stats[cc][1]), 
+                                 cv.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 1, cv.LINE_AA)
 
     return labeled_img
 
@@ -89,28 +94,24 @@ def findMER(major_axis: np.ndarray, minor_axis: np.ndarray, edges: np.ndarray) -
     d_ma_max, d_mi_max = -np.inf, -np.inf
     norm_ma = np.sqrt(major_axis[0] * major_axis[0] + major_axis[1] * major_axis[1])
     norm_mi = np.sqrt(minor_axis[0] * minor_axis[0] + minor_axis[1] * minor_axis[1])
-    c_points = np.zeros((4, 2), dtype=np.int32)
-    v_points = np.zeros((4, 2), dtype=np.int32)
+    c_points = np.zeros((4, 2), dtype=np.float32)
+    v_points = np.zeros((4, 2), dtype=np.float32)
 
     for i in range(edges.shape[0]):
         d_ma = (major_axis[0] * edges[i][0][0] + major_axis[1] * edges[i][0][1] + major_axis[2]) / norm_ma
         d_mi = (minor_axis[0] * edges[i][0][0] + minor_axis[1] * edges[i][0][1] + minor_axis[2]) / norm_mi
         if d_ma < d_ma_min:
             d_ma_min = d_ma
-            c_points[0, 0] = edges[i][0][0]
-            c_points[0, 1] = edges[i][0][1]
+            c_points[0] = edges[i][0]
         elif d_ma > d_ma_max:
             d_ma_max = d_ma
-            c_points[1, 0] = edges[i][0][0]
-            c_points[1, 1] = edges[i][0][1]
+            c_points[1] = edges[i][0]
         if d_mi < d_mi_min:
             d_mi_min = d_mi
-            c_points[2, 0] = edges[i][0][0]
-            c_points[2, 1] = edges[i][0][1]
+            c_points[2] = edges[i][0]
         elif d_mi > d_mi_max:
             d_mi_max = d_mi
-            c_points[3, 0] = edges[i][0][0]
-            c_points[3, 1] = edges[i][0][1]
+            c_points[3] = edges[i][0]
 
     c_l = -np.matmul(c_points[:2, :], major_axis[:2])
     c_w = -np.matmul(c_points[2:, :], minor_axis[:2])
@@ -119,7 +120,7 @@ def findMER(major_axis: np.ndarray, minor_axis: np.ndarray, edges: np.ndarray) -
     v_points[:, 1] = np.matmul(np.array(np.meshgrid(c_l, c_w)).T.reshape(-1, 2),
                                [minor_axis[0], -major_axis[0]]) / np.cross(major_axis[:2], minor_axis[:2])
 
-    return v_points, c_points
+    return np.round(v_points).astype("int32"), np.round(c_points).astype("int32")
 
 
 def getWidthAtBarycenter(edges: np.ndarray, major_axis: np.ndarray, minor_axis: np.ndarray) -> \
@@ -285,26 +286,29 @@ def discardDistractorsAndArtifacts(connected_components: typing.Tuple[int, np.nd
     return n_labels, label_ids, stats[valid_indexes], centroids[valid_indexes]
 
 
+def floatTupleToIntTuple(float_tuple: typing.Tuple[float, float]) -> typing.Tuple[int, int]:
+    return int(np.round(float_tuple[0])), int(np.round(float_tuple[1]))
+
 def printRodDescriptions(rods_descriptions: typing.List[typing.Dict]):
     for idx, rod_description in enumerate(rods_descriptions):
-        print("The rod labeled %d is of type %s" % (idx, rod_description["rod_type"]))
+        print("The rod labeled %d is of type %s" % (idx + 1, rod_description["rod_type"]))
         print("Its barycenter is at position %s, it has an orientation angle of %.2f degrees, "
               "its length is %.2f, its width is %.2f, and its width at the barycenter is %.2f"
-              % (str(rod_description["barycenter"]), np.rad2deg(rod_description["angle"]),
+              % (str(floatTupleToIntTuple(rod_description["barycenter"])), np.rad2deg(rod_description["angle"]),
                  rod_description["length"], rod_description["width"], rod_description["barycenter_width"]))
         if rod_description["rod_type"] == "A":
-            print("The only hole in the rod is at position %s and has diameter equal to %.2f" % (
-            str(rod_description["1st_hole_center"]), rod_description["1st_hole_diameter"]))
+            print("The only hole in the rod is at position %s and has diameter equal to %.2f" % 
+                  (str(floatTupleToIntTuple(rod_description["1st_hole_center"])), rod_description["1st_hole_diameter"]))
         else:
             print("The first hole in the rod is at position %s and has diameter equal to %.2f" %
-                  (str(rod_description["1st_hole_center"]), rod_description["1st_hole_diameter"]))
+                  (str(floatTupleToIntTuple(rod_description["1st_hole_center"])), rod_description["1st_hole_diameter"]))
             print("The second hole in the rod is at position %s and has diameter equal to %.2f" %
-                  (str(rod_description["2nd_hole_center"]), rod_description["2nd_hole_diameter"]))
+                  (str(floatTupleToIntTuple(rod_description["2nd_hole_center"])), rod_description["2nd_hole_diameter"]))
         print("\n")
     print("\n\n")
 
 
-def pipeline(gray_img: np.ndarray, smooth_img: bool):
+def processImage(gray_img: np.ndarray, smooth_img: bool) -> typing.List[typing.Dict]:
     img = gray_img.copy()
     if smooth_img:
         img = cv.bilateralFilter(img, d=17, sigmaColor=24, sigmaSpace=12)
@@ -344,3 +348,5 @@ def pipeline(gray_img: np.ndarray, smooth_img: bool):
     plt.show()
 
     printRodDescriptions(rods_descriptions)
+    
+    return rods_descriptions
