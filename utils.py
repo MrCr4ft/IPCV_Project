@@ -6,11 +6,63 @@ from sklearn.neighbors import KernelDensity
 from sklearn.cluster import DBSCAN
 import scipy
 import scipy.signal
+from scipy.ndimage import gaussian_filter1d
 from matplotlib import pyplot as plt
 
 
 MIN_ROD_AREA = 1280
 MAX_ROD_AREA = 6000
+
+
+def valleyDeepness(probs: np.ndarray):
+    sign_func = lambda x : 0 if x <= 0 else x
+    ld = np.zeros((256,), dtype=np.float32)
+    rd = np.zeros((256,), dtype=np.float32)
+    db = np.zeros((256,), dtype=np.float32)
+    for b in range(256):
+        for a in range(0, b):
+            if sign_func(probs[a] - probs[b]) > ld[b]:
+                ld[b] = sign_func(probs[a] - probs[b])
+        for c in range(b + 1, 256):
+            if sign_func(probs[c] - probs[b]) > rd[b]:
+                rd[b] = sign_func(probs[c] - probs[b])
+        if ld[b] > 0 and rd[b] > 0:
+            db[b] = (ld[b] + rd[b]) / 2
+    return db
+
+
+def computeOtsuThreshold(image: np.ndarray, apply_valley_emphasis_method: bool = True):
+    img_size = image.shape[0] * image.shape[1]
+    histogram, bins = np.histogram(image, np.arange(257))
+    intensities = np.arange(256)
+    
+    if apply_valley_emphasis_method:
+        probs = gaussian_filter1d(histogram / img_size, 3)
+        v_d = valleyDeepness(probs)
+        weights = (1 - probs) + v_d
+    
+    threshold = 0
+    max_value = -np.inf
+    
+    for t in range(255):
+        p_1 = np.sum(histogram[:t+1])
+        p_2 = np.sum(histogram[t+1:])
+        
+        w_1_t = p_1 / img_size
+        w_2_t = p_2 / img_size
+        
+        mu_1_t = np.sum(histogram[:t+1] * intensities[:t+1]) / p_1
+        mu_2_t = np.sum(histogram[t+1:] * intensities[t+1:]) / p_2
+        
+        value = w_1_t * (mu_1_t ** 2) + w_2_t * (mu_2_t ** 2)
+        if apply_valley_emphasis_method:
+            value = weights[t] * value
+
+        if value > max_value:
+            threshold = t
+            max_value = value
+
+    return int(threshold)
 
 
 def binarizeImage(image: np.ndarray, kde_bandwidth: int = 5) -> np.ndarray:
@@ -21,9 +73,17 @@ def binarizeImage(image: np.ndarray, kde_bandwidth: int = 5) -> np.ndarray:
     # where the first zero-crossing is in correspondence of the first mode
     threshold = scipy.signal.argrelmin(log_dens)[0][0]
     binarized_image = np.zeros(image.shape, dtype=image.dtype)
-    binarized_image[image < threshold] = 0
-    binarized_image[image >= threshold] = 255
-    return threshold, 255 - binarized_image
+    binarized_image[image < threshold] = 255
+
+    return threshold, binarized_image
+
+
+def binarizeImageOtsu(image: np.ndarray, apply_valley_emphasis_method: bool = True):
+    threshold = computeOtsuThreshold(image, apply_valley_emphasis_method)
+    binarized_image = np.zeros(image.shape, dtype=image.dtype)
+    binarized_image[image < threshold] = 255
+
+    return threshold, binarized_image
 
 
 def drawConnectedComponents(n_labels: int, label_ids: np.ndarray,
@@ -308,12 +368,32 @@ def printRodDescriptions(rods_descriptions: typing.List[typing.Dict]):
     print("\n\n")
 
 
-def processImage(gray_img: np.ndarray, smooth_img: bool) -> typing.List[typing.Dict]:
-    img = gray_img.copy()
-    if smooth_img:
-        img = cv.bilateralFilter(img, d=17, sigmaColor=24, sigmaSpace=12)
+def sharpenImage(image, kernel_size=(3, 3), sigma=1.0, amount=1.0):
+    blurred = cv.GaussianBlur(image, kernel_size, sigma)
+    sharpened = float(amount + 1) * image - float(amount) * blurred
+    sharpened = np.clip(sharpened, 0, 255).round().astype("uint8")
 
-    threshold, binarized_img = binarizeImage(img, kde_bandwidth=6)
+    return sharpened
+
+
+def processImage(gray_img: np.ndarray, smooth_img: bool, kde_bandwidth: int = 6, otsu_binarization: bool = False, apply_valley_emphasis_method: bool = False) -> typing.List[typing.Dict]:
+    img = gray_img.copy()
+
+    fig = plt.figure(figsize=(16, 16))
+
+    fig.add_subplot(4, 4, 1)
+    plt.imshow(img, cmap="gray")
+    
+    if smooth_img:
+        for _ in range(5):
+            img = cv.medianBlur(img, 3)
+        img = sharpenImage(img, kernel_size=(11, 11), sigma=5.0, amount=1.0)
+
+    if otsu_binarization:
+        threshold, binarized_img = binarizeImageOtsu(img, apply_valley_emphasis_method)
+    else:
+        threshold, binarized_img = binarizeImage(img, kde_bandwidth)
+
     preliminary_connected_components = cv.connectedComponentsWithStats(binarized_img, connectivity=4)
     preliminary_connected_components = discardDistractorsAndArtifacts(preliminary_connected_components)
 
@@ -330,11 +410,6 @@ def processImage(gray_img: np.ndarray, smooth_img: bool) -> typing.List[typing.D
         rods_descriptions.append(getRodTypeAndDescription(mask))
 
     mer_labeled_img = drawMERSWithAxes((n_labels, label_ids, stats, centroids), rods_descriptions)
-
-    fig = plt.figure(figsize=(16, 16))
-
-    fig.add_subplot(4, 4, 1)
-    plt.imshow(img, cmap="gray")
 
     fig.add_subplot(4, 4, 2)
     plt.imshow(binarized_img, cmap="gray")
