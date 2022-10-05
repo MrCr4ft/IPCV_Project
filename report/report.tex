@@ -1,0 +1,79 @@
+\documentclass[12pt,a4paper,openany,oneside]{book}
+\linespread{1.5}
+
+\usepackage{hyperref}
+\usepackage[english]{babel}
+
+
+\usepackage[latin1]{inputenc}
+
+\usepackage{graphicx}
+\usepackage{subfig}
+\usepackage[font=small,labelfont=bf,tableposition=top]{caption}
+
+\usepackage{listings}
+\usepackage{courier}
+\usepackage{adjustbox}
+
+ \lstset{
+         language=C++,
+         basicstyle=\footnotesize\ttfamily,
+         numbers=left,           
+         numberstyle=\tiny,       
+         numbersep=5pt,        
+         tabsize=5,                 
+         extendedchars=true,         
+         breaklines=true,
+         keywordstyle=\textbf,           
+         stringstyle=\color{white}\ttfamily,
+         showspaces=false,       
+         showtabs=false,           
+         xleftmargin=17pt,
+         framexleftmargin=17pt,
+         framexrightmargin=5pt,
+         framexbottommargin=4pt,
+         showstringspaces=false          
+ }
+
+\setcounter{tocdepth}{3}
+\setcounter{secnumdepth}{3}
+
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{mathtools}
+\DeclarePairedDelimiter{\ceil}{\lceil}{\rceil}
+\usepackage{framed}
+
+\usepackage[font=small,labelfont=bf,tableposition=top]{caption}
+
+\usepackage{color, colortbl}
+\definecolor{Gray}{gray}{0.9}
+
+\usepackage{array}
+\usepackage{multirow}
+
+\usepackage[showframe=false]{geometry}
+\usepackage{changepage}
+\graphicspath{ {images/} }
+
+\begin{document}
+
+\input{parts/titlepage}
+
+\bibliographystyle{unsrt}
+\title{IPCV Project Report}
+\author{Giorgio Buzzanca}
+
+\input{parts/abstract}
+
+\tableofcontents
+
+\input{parts/chapter1}
+\input{parts/chapter2}
+
+\newpage
+\addcontentsline{toc}{chapter}{Bibliography}
+\bibliography{bibliography}
+
+\end{document}
